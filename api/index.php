@@ -2,6 +2,13 @@
 
 // Forward Vercel serverless requests to public/index.php
 
+if (!getenv('APP_KEY')) {
+    $fallbackKey = 'base64:ZnYC4nz9klS2GcNmo4tCgRKVtzp5mJMyBlds1KZN2uo=';
+    putenv("APP_KEY={$fallbackKey}");
+    $_ENV['APP_KEY'] = $fallbackKey;
+    $_SERVER['APP_KEY'] = $fallbackKey;
+}
+
 $storageDirs = [
     '/tmp/storage/app',
     '/tmp/storage/framework/cache',
