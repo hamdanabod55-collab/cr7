@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\DashboardItem;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Config;
 
 class DashboardController extends Controller
 {
@@ -18,15 +20,36 @@ class DashboardController extends Controller
             'database' => config('database.connections.' . config('database.default') . '.database'),
             'error' => null,
             'version' => null,
+            'is_fallback' => false,
         ];
 
+        // Attempt 1: Connect to configured database (Neon PostgreSQL or default)
         try {
             $pdo = DB::connection()->getPdo();
             $dbStatus['connected'] = true;
             $dbStatus['version'] = DB::selectOne("SELECT version()")?->version ?? 'PostgreSQL';
         } catch (\Exception $e) {
-            $dbStatus['connected'] = false;
-            $dbStatus['error'] = $e->getMessage();
+            // Attempt 2: If Neon PostgreSQL is disabled or fails, fallback to SQLite in /tmp
+            try {
+                $sqlitePath = is_writable('/tmp') ? '/tmp/database.sqlite' : database_path('database.sqlite');
+                if (!file_exists($sqlitePath)) {
+                    @touch($sqlitePath);
+                }
+
+                Config::set('database.default', 'sqlite');
+                Config::set('database.connections.sqlite.database', $sqlitePath);
+                DB::purge('sqlite');
+                DB::reconnect('sqlite');
+
+                $pdo = DB::connection('sqlite')->getPdo();
+                $dbStatus['connected'] = true;
+                $dbStatus['driver'] = 'sqlite (محلّي / احتياطي)';
+                $dbStatus['is_fallback'] = true;
+                $dbStatus['error'] = 'ملاحظة: تعذر الاتصال بـ Neon Cloud PostgreSQL، تم تفعيل قاعدة البيانات الاحتياطية تلقائياً.';
+            } catch (\Exception $fallbackEx) {
+                $dbStatus['connected'] = false;
+                $dbStatus['error'] = $e->getMessage();
+            }
         }
 
         $items = collect();
@@ -40,6 +63,12 @@ class DashboardController extends Controller
 
         if ($dbStatus['connected']) {
             try {
+                // Auto-run migration & seeding if table does not exist yet
+                if (!Schema::hasTable('dashboard_items')) {
+                    Artisan::call('migrate', ['--force' => true]);
+                    Artisan::call('db:seed', ['--force' => true]);
+                }
+
                 $items = DashboardItem::orderBy('id', 'desc')->get();
                 $stats['total'] = $items->count();
                 $stats['operational'] = $items->where('status', 'Operational')->count();
@@ -49,8 +78,7 @@ class DashboardController extends Controller
                     ? round((($stats['operational'] + $stats['completed']) / $stats['total']) * 100) 
                     : 100;
             } catch (\Exception $e) {
-                // Table might not exist yet before migration
-                $dbStatus['error'] = 'Database connected, but dashboard_items table is missing. Run migration.';
+                $dbStatus['error'] = 'حدث خطأ عند استعلام قاعدة البيانات: ' . $e->getMessage();
             }
         }
 
@@ -71,7 +99,7 @@ class DashboardController extends Controller
 
         DashboardItem::create($validated);
 
-        return redirect()->route('dashboard')->with('success', 'Dashboard item created successfully!');
+        return redirect()->route('dashboard')->with('success', 'تم إضافة العنصر الجديد بنجاح إلى قاعدة البيانات!');
     }
 
     public function update(Request $request, $id)
@@ -84,7 +112,7 @@ class DashboardController extends Controller
 
         $item->update($validated);
 
-        return redirect()->route('dashboard')->with('success', 'Item status updated successfully!');
+        return redirect()->route('dashboard')->with('success', 'تم تحديث حالة العنصر بنجاح!');
     }
 
     public function destroy($id)
@@ -92,7 +120,7 @@ class DashboardController extends Controller
         $item = DashboardItem::findOrFail($id);
         $item->delete();
 
-        return redirect()->route('dashboard')->with('success', 'Item removed successfully!');
+        return redirect()->route('dashboard')->with('success', 'تم حذف العنصر بنجاح!');
     }
 
     public function dbCheck()
@@ -100,7 +128,7 @@ class DashboardController extends Controller
         try {
             $pdo = DB::connection()->getPdo();
             $version = DB::selectOne("SELECT version()")?->version;
-            $tableCount = DB::table('dashboard_items')->count();
+            $tableCount = Schema::hasTable('dashboard_items') ? DB::table('dashboard_items')->count() : 0;
 
             return response()->json([
                 'status' => 'success',
