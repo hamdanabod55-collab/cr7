@@ -2,6 +2,10 @@
 
 // Forward Vercel serverless requests to public/index.php
 
+$_SERVER['HTTPS'] = 'on';
+$_SERVER['SERVER_PORT'] = 443;
+putenv('HTTPS=on');
+
 if (!getenv('APP_KEY')) {
     $fallbackKey = 'base64:ZnYC4nz9klS2GcNmo4tCgRKVtzp5mJMyBlds1KZN2uo=';
     putenv("APP_KEY={$fallbackKey}");
