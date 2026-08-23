@@ -23,13 +23,13 @@ class DashboardController extends Controller
             'is_fallback' => false,
         ];
 
-        // Attempt 1: Connect to configured database (Neon PostgreSQL or default)
+        // Attempt 1: Connect to configured database (Neon PostgreSQL, Render, or default)
         try {
             $pdo = DB::connection()->getPdo();
             $dbStatus['connected'] = true;
             $dbStatus['version'] = DB::selectOne("SELECT version()")?->version ?? 'PostgreSQL';
         } catch (\Exception $e) {
-            // Attempt 2: If Neon PostgreSQL is disabled or fails, fallback to SQLite in /tmp
+            // Attempt 2: If primary DB is disabled or fails, fallback to SQLite in /tmp
             try {
                 $sqlitePath = is_writable('/tmp') ? '/tmp/database.sqlite' : database_path('database.sqlite');
                 if (!file_exists($sqlitePath)) {
@@ -45,7 +45,7 @@ class DashboardController extends Controller
                 $dbStatus['connected'] = true;
                 $dbStatus['driver'] = 'sqlite (محلّي / احتياطي)';
                 $dbStatus['is_fallback'] = true;
-                $dbStatus['error'] = 'ملاحظة: تعذر الاتصال بـ Neon Cloud PostgreSQL، تم تفعيل قاعدة البيانات الاحتياطية تلقائياً.';
+                $dbStatus['error'] = 'ملاحظة: تعذر الاتصال بالسيرفر الأساسي، تم تفعيل قاعدة البيانات الاحتياطية تلقائياً.';
             } catch (\Exception $fallbackEx) {
                 $dbStatus['connected'] = false;
                 $dbStatus['error'] = $e->getMessage();
@@ -99,7 +99,7 @@ class DashboardController extends Controller
 
         DashboardItem::create($validated);
 
-        return redirect()->route('dashboard')->with('success', 'تم إضافة العنصر الجديد بنجاح إلى قاعدة البيانات!');
+        return redirect()->to('/', 302, [], true)->with('success', 'تم إضافة العنصر الجديد بنجاح إلى قاعدة البيانات!');
     }
 
     public function update(Request $request, $id)
@@ -112,7 +112,7 @@ class DashboardController extends Controller
 
         $item->update($validated);
 
-        return redirect()->route('dashboard')->with('success', 'تم تحديث حالة العنصر بنجاح!');
+        return redirect()->to('/', 302, [], true)->with('success', 'تم تحديث حالة العنصر بنجاح!');
     }
 
     public function destroy($id)
@@ -120,7 +120,7 @@ class DashboardController extends Controller
         $item = DashboardItem::findOrFail($id);
         $item->delete();
 
-        return redirect()->route('dashboard')->with('success', 'تم حذف العنصر بنجاح!');
+        return redirect()->to('/', 302, [], true)->with('success', 'تم حذف العنصر بنجاح!');
     }
 
     public function dbCheck()
