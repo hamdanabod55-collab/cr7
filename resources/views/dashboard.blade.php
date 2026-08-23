@@ -258,7 +258,13 @@
             @if($dbStatus['connected'])
                 <span class="db-badge online">
                     <span class="dot online"></span>
-                    متصل بقاعدة البيانات
+                    @if($dbStatus['is_fallback'] ?? false)
+                        متصل بقاعدة البيانات السحابية (Vercel SQLite)
+                    @elseif(str_contains(strtolower($dbStatus['host']), 'render.com'))
+                        متصل بقاعدة بيانات PostgreSQL (Render Cloud)
+                    @else
+                        متصل بقاعدة بيانات Cloud PostgreSQL
+                    @endif
                 </span>
             @else
                 <span class="db-badge offline">
