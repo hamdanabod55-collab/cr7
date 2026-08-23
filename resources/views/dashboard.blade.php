@@ -300,7 +300,7 @@
     <!-- نموذج إضافة بسيط -->
     <div class="card-form">
         <h3>إضافة مهمة جديدة</h3>
-        <form action="{{ route('items.store') }}" method="POST">
+        <form action="/items" method="POST">
             @csrf
             <div class="form-row">
                 <input type="text" name="title" class="form-input" placeholder="اسم المهمة" required>
@@ -350,13 +350,13 @@
                         </td>
                         <td>
                             <div style="display: flex; gap: 0.4rem;">
-                                <form action="{{ route('items.update', $item->id) }}" method="POST">
+                                <form action="/items/{{ $item->id }}" method="POST">
                                     @csrf
                                     @method('PATCH')
                                     <input type="hidden" name="status" value="{{ $item->status === 'Operational' ? 'Completed' : 'Operational' }}">
                                     <button type="submit" class="btn-sm">تغيير الحالة</button>
                                 </form>
-                                <form action="{{ route('items.destroy', $item->id) }}" method="POST" onsubmit="return confirm('حذف المهمة؟')">
+                                <form action="/items/{{ $item->id }}" method="POST" onsubmit="return confirm('حذف المهمة؟')">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="btn-sm btn-del">حذف</button>
