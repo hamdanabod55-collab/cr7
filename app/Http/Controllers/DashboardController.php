@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Config;
 
 class DashboardController extends Controller
 {
-    public function index()
+    private function ensureDatabaseConnection()
     {
         $dbStatus = [
             'connected' => false,
@@ -23,13 +23,13 @@ class DashboardController extends Controller
             'is_fallback' => false,
         ];
 
-        // Attempt 1: Connect to configured database (Neon PostgreSQL, Render, or default)
         try {
+            // Check primary DB connection (Neon, Render, or configured host)
             $pdo = DB::connection()->getPdo();
             $dbStatus['connected'] = true;
             $dbStatus['version'] = DB::selectOne("SELECT version()")?->version ?? 'PostgreSQL';
         } catch (\Exception $e) {
-            // Attempt 2: If primary DB is disabled or fails, fallback to SQLite in /tmp
+            // Fallback to SQLite in /tmp if primary DB is unavailable or refused connection
             try {
                 $sqlitePath = is_writable('/tmp') ? '/tmp/database.sqlite' : database_path('database.sqlite');
                 if (!file_exists($sqlitePath)) {
@@ -52,6 +52,24 @@ class DashboardController extends Controller
             }
         }
 
+        if ($dbStatus['connected']) {
+            try {
+                if (!Schema::hasTable('dashboard_items')) {
+                    Artisan::call('migrate', ['--force' => true]);
+                    Artisan::call('db:seed', ['--force' => true]);
+                }
+            } catch (\Exception $ex) {
+                // Ignore migration errors if already existing
+            }
+        }
+
+        return $dbStatus;
+    }
+
+    public function index()
+    {
+        $dbStatus = $this->ensureDatabaseConnection();
+
         $items = collect();
         $stats = [
             'total' => 0,
@@ -63,12 +81,6 @@ class DashboardController extends Controller
 
         if ($dbStatus['connected']) {
             try {
-                // Auto-run migration & seeding if table does not exist yet
-                if (!Schema::hasTable('dashboard_items')) {
-                    Artisan::call('migrate', ['--force' => true]);
-                    Artisan::call('db:seed', ['--force' => true]);
-                }
-
                 $items = DashboardItem::orderBy('id', 'desc')->get();
                 $stats['total'] = $items->count();
                 $stats['operational'] = $items->where('status', 'Operational')->count();
@@ -87,6 +99,8 @@ class DashboardController extends Controller
 
     public function store(Request $request)
     {
+        $this->ensureDatabaseConnection();
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'category' => 'required|string|max:100',
@@ -104,6 +118,8 @@ class DashboardController extends Controller
 
     public function update(Request $request, $id)
     {
+        $this->ensureDatabaseConnection();
+
         $item = DashboardItem::findOrFail($id);
 
         $validated = $request->validate([
@@ -117,6 +133,8 @@ class DashboardController extends Controller
 
     public function destroy($id)
     {
+        $this->ensureDatabaseConnection();
+
         $item = DashboardItem::findOrFail($id);
         $item->delete();
 
